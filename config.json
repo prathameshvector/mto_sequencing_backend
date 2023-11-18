@@ -1,0 +1,17 @@
+{   "filepaths":{
+        "input_file_path" : "D:\\Python\\mto_sequencing\\input"
+        },
+    "bunching_criteria" : "sku",
+    "bunching_unit" : "order_billet_nos",
+    "bunching_min_cutoff_criteria":"order_billet_nos",
+    "bunching_max_cutoff_criteria":"order_billet_nos",
+    "cycle_time_criteria" : "order_qty",
+    "last_executed_criteria" : "PQF-PQF-180",
+    "current_datetime" : "2023-10-18 00:00:00",
+    "default_mts_attributes" :{
+        "order_qty":null,
+         "order_billet_nos":null,
+         "order_rd":null,
+         "order_dd":null
+    }
+}
