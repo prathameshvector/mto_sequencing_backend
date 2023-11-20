@@ -1,10 +1,12 @@
 import datetime
 import time
 import os
+import openpyxl
 import pandas as pd
 from packages.sequencing_engine.orders import Order, bunchingCriteria
 from xlwt import Workbook
 import datetime as dt
+import warnings
 
 def createBunchingCriterias(file_name):
     from main import CONFIG
@@ -129,11 +131,11 @@ def displayBunches(all_bunches):
         print('- - - - - - - - - - - - - - - - - - - ')
 
 
-def switchMapGenerator():
-    from main import CONFIG
+def switchMapGenerator(CONFIG):
     """ This function generates the context witching dictionary based on the input file.
     """
-    INPUT_FILE_PATH = CONFIG['filepaths']['input_file_path']
+    warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
+    INPUT_FILE_PATH = f"{CONFIG['filepaths']['input_file_path']}\\{os.listdir(CONFIG['filepaths']['input_file_path'])[0]}"
     map = pd.read_excel(INPUT_FILE_PATH, sheet_name='Switching Cost Matrix', index_col=False)
     map.set_index('Unnamed: 0', inplace=True)
     map = map.to_dict(orient='index')

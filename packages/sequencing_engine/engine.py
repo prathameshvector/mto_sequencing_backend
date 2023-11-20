@@ -1,12 +1,10 @@
 import json
 import time
 import datetime
-
 import pandas as pd
 from packages.sequencing_engine.orders import Order
 from packages.sequencing_engine.operations import generateOutput, calcSeqScore, calcBunchExecTime, findBunchIdx,\
       nextSwitchbunchingCriteria, switchMapGenerator, find_combinations, skuToBunchMap
-switch_map = switchMapGenerator()
 
 class sequencingEngine:
     def __init__(self, config_path):
@@ -67,7 +65,7 @@ class sequencingEngine:
                     for order in bunch:
                         if order.order_rd != None:
                             self.order_book.remove(order)
-    def run_sequencing(self,bunches, sku, function_call_time,TIMER, relax_days, current_time, final_seq, final_seq_bool, seq_score_map, call_ct):
+    def run_sequencing(self,bunches, sku, function_call_time,TIMER, relax_days, current_time, final_seq, final_seq_bool, seq_score_map, call_ct, switch_map):
         global best_seq
         if len(bunches) == 0:
             score = calcSeqScore(self.CONFIG['current_datetime'],final_seq)
@@ -119,7 +117,7 @@ class sequencingEngine:
                         if final_seq_bool == False:
                             new_call_ct = call_ct + 1
                             new_bunches = [bnch  for bnch in bunches if bnch != bunch]
-                            self.run_sequencing(self,bunches=new_bunches,sku=sku,function_call_time=function_call_time,TIMER=TIMER, relax_days=relax_days, current_time=new_current_time, final_seq=new_sequence, final_seq_bool = final_seq_bool, seq_score_map=seq_score_map, call_ct=new_call_ct)
+                            self.run_sequencing(self,bunches=new_bunches,sku=sku,function_call_time=function_call_time,TIMER=TIMER, relax_days=relax_days, current_time=new_current_time, final_seq=new_sequence, final_seq_bool = final_seq_bool, seq_score_map=seq_score_map, call_ct=new_call_ct,switch_map=switch_map)
                         else:
                             return
                     else:

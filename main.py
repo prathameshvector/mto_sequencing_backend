@@ -1,12 +1,16 @@
 from packages.sequencing_engine.engine import sequencingEngine
-sequenceEngine = None
+from packages.sequencing_engine.operations import switchMapGenerator
+
+
+sequence_engine = None
 def main():
-    sequence_engine = sequenceEngine("config.json")
+    sequence_engine = sequencingEngine("config.json")    # here we are creating an instance of the engine
     CONFIG = sequence_engine.CONFIG
-    sequence_engine.load_orderbook()
+    switch_map = switchMapGenerator(CONFIG)
+    sequence_engine.load_order_book()
     sequence_engine.run_bunching()
-    sequence_engine.run_sequence()
+    sequence_engine.run_sequencing()
     sequence_engine.save_output()
 
-if __name__ == "main":
+if __name__ == "__main__":
     main()
