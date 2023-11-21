@@ -8,10 +8,7 @@ from xlwt import Workbook
 import datetime as dt
 import warnings
 
-def createBunchingCriterias(file_name):
-    from main import CONFIG
-    # INPUT_FILE_PATH = f"{os.getcwd()}\\input\\{os.listdir('./input')[0]}"
-    INPUT_FILE_PATH = CONFIG['filepaths']['input_file_path']
+def createBunchingCriterias(INPUT_FILE_PATH):
     min_batch_masterfile = pd.read_excel(INPUT_FILE_PATH, sheet_name='Min Batch')
     max_batch_masterfile = pd.read_excel(INPUT_FILE_PATH, sheet_name='Max Batch')
     cycle_time_masterfile = pd.read_excel(INPUT_FILE_PATH,sheet_name='Cycle Time')
@@ -19,9 +16,7 @@ def createBunchingCriterias(file_name):
         unit = min_batch_masterfile.iloc[i]['Key']
         obj = bunchingCriteria(unit,min_batch_masterfile.iloc[i]['Min batch Size'],float(max_batch_masterfile.iloc[i]['Max Batch Size']),cycle_time_masterfile.iloc[i]['Cycle Time'],0)
 
-def createOrders(bunching_criteria_instances):
-    from main import CONFIG
-    INPUT_FILE_PATH = f"{os.getcwd()}\\input\\{os.listdir('./input')[0]}"
+def createOrders(bunching_criteria_instances, INPUT_FILE_PATH, CONFIG):
     file = pd.read_excel(INPUT_FILE_PATH)
     file = file.sort_values(by='order due date')
     all_orders = []
@@ -38,14 +33,13 @@ def createOrders(bunching_criteria_instances):
     return all_orders
 
 
-def calcQuantity(bunch, quant_criteria):
-    from main import CONFIG
+def calcQuantity(bunch, quant_criteria, CONFIG):
     total_quantity = 0
     for order in bunch:
         total_quantity += order.__getattribute__(CONFIG[quant_criteria])
     return total_quantity
 
-def calcRemSpace(sku, bunches):
+def calcRemSpace(sku, bunches, CONFIG):
     """This function takes sku object and list of bunches as input.
        The output that it generates is an integer value that tells the 
        total space(quantity) that the previous bunches can avail in order 
@@ -53,22 +47,22 @@ def calcRemSpace(sku, bunches):
     max_qty = sku.moq_ul
     rem_qty = 0
     for bunch in bunches:
-        if bunch[0].order_sku.sku_name == sku.sku_name and calcQuantity(bunch,'bunching_max_cutoff_criteria') < max_qty:
-            rem_qty += max_qty - calcQuantity(bunch,'bunching_max_cutoff_criteria')
+        if bunch[0].order_sku.sku_name == sku.sku_name and calcQuantity(bunch,'bunching_max_cutoff_criteria', CONFIG) < max_qty:
+            rem_qty += max_qty - calcQuantity(bunch,'bunching_max_cutoff_criteria', CONFIG)
             pass
     return rem_qty
 
 
-def calcSeqScore(current_date,bunches):
+def calcSeqScore(current_date,bunches,CONFIG):
 
     """This function will check the score of the bunch in
     terms of the number of orders missing their due dates."""
 
-    current_date = datetime.datetime.strptime(current_date,'%d/%m/%Y %H:%M:%S')
+    current_date = datetime.datetime.strptime(current_date,'%Y-%m-%d %H:%M:%S')
     score = 0
     for index,bunch in enumerate(bunches):
         if index != 0 and bunch[0].order_sku.sku_name != bunches[index-1][0].order_sku.sku_name:
-            map = switchMapGenerator()
+            map = switchMapGenerator(CONFIG=CONFIG)
             current_date += datetime.timedelta(minutes=map[bunches[index-1][0].order_sku.sku_name][bunch[0].order_sku.sku_name])
 
         for order in bunch:
@@ -101,20 +95,18 @@ def calcSeqScore(current_date,bunches):
   
     return score
 
-def bunchingUnitBasedCycleTime(bunch, mts_order):
-    from main import CONFIG
+def bunchingUnitBasedCycleTime(bunch, mts_order,CONFIG):
     return (sum(order.__getattribute__(CONFIG['cycle_time_criteria']) for order in bunch if order.__getattribute__(CONFIG['cycle_time_criteria'])!=None)/\
         sum(order.__getattribute__(CONFIG['bunching_unit']) for order in bunch if order.__getattribute__(CONFIG['cycle_time_criteria'])!=None))\
         *mts_order.__getattribute__(CONFIG['bunching_unit'])
 
 
-def calcBunchExecTime(bunch):
-    from main import CONFIG
+def calcBunchExecTime(bunch,CONFIG):
     """This function will calculate the execution time of a bunch"""
     total_qty = 0
     for order in bunch:
         if order.__getattribute__(CONFIG['cycle_time_criteria']) == None:
-            setattr(order,CONFIG['cycle_time_criteria'],bunchingUnitBasedCycleTime(bunch,order) )
+            setattr(order,CONFIG['cycle_time_criteria'],bunchingUnitBasedCycleTime(bunch,order,CONFIG) )
         total_qty += order.__getattribute__(CONFIG['cycle_time_criteria'])
     return total_qty * order.order_sku.cycle_time
 
@@ -141,8 +133,8 @@ def switchMapGenerator(CONFIG):
     map = map.to_dict(orient='index')
     return map
 
-def calcBunchingCriteriaSwitchTime(prev_sku,next_sku):
-    map = switchMapGenerator()
+def calcBunchingCriteriaSwitchTime(prev_sku,next_sku,CONFIG):
+    map = switchMapGenerator(CONFIG)
     return map[prev_sku][next_sku]
 
 def nextSwitchbunchingCriteria(sku, map):
@@ -157,8 +149,7 @@ def findBunchIdx(sku, bunches):
     return None
 
 
-def execDateCalculator(current_date,order):
-    from main import CONFIG
+def execDateCalculator(current_date,order,CONFIG):
     order_exec_time = order.__getattribute__(CONFIG['cycle_time_criteria']) * order.order_sku.cycle_time
     return current_date + datetime.timedelta(minutes= int(order_exec_time))
 
@@ -197,7 +188,7 @@ def boolAdjacentBunches(sku,final_seq):
         if bunch[0].order_sku.sku_name == sku:
             netAdjacentBunchSize += calcQuantity(bunch=bunch,quant_criteria='bunching_max_cutoff_criteria')
 
-def generateOutput(fin_seq, current_date):
+def generateOutput(fin_seq, current_date,CONFIG):
     wb = Workbook()
     sheet1 = wb.add_sheet('Sheet 1')
     row = 1
@@ -213,7 +204,7 @@ def generateOutput(fin_seq, current_date):
         if index != 0 and fin_seq[index-1][0].order_sku.sku_name != bunch[0].order_sku.sku_name:
             prev_sku = fin_seq[index-1][0].order_sku.sku_name
             next_sku = fin_seq[index][0].order_sku.sku_name
-            current_date += datetime.timedelta(minutes=calcBunchingCriteriaSwitchTime(prev_sku, next_sku))
+            current_date += datetime.timedelta(minutes=calcBunchingCriteriaSwitchTime(prev_sku, next_sku,CONFIG))
         for order in bunch:
             print(f'{order.order_sku.sku_name}, {order.order_rd}')
             sheet1.write(row, 0, order.so_no)
@@ -222,7 +213,7 @@ def generateOutput(fin_seq, current_date):
             sheet1.write(row, 3, str(order.order_billet_nos))
             sheet1.write(row, 4, order.order_rd)
             sheet1.write(row, 5, order.order_dd)
-            current_date = execDateCalculator(current_date, order)
+            current_date = execDateCalculator(current_date, order,CONFIG)
             sheet1.write(row, 6, str(current_date))
             try:
                 delay = current_date - dt.datetime.strptime(order.order_dd,'%Y-%m-%d %H:%M:%S')
@@ -248,8 +239,8 @@ def find_combinations(engine_instance,data, target, TIMER):
     as input, and finds the best combination of orders from the order book to form the bunch.
     """
     filtered_orders = [order for order in data if order.order_sku.sku_name == data[0].order_sku.sku_name]
-    if calcQuantity(filtered_orders,'bunching_min_cutoff_criteria') < data[0].order_sku.moq_ll:
-        engine_instance.combination_map.append({calcQuantity(filtered_orders, 'bunching_min_cutoff_criteria'):filtered_orders})
+    if calcQuantity(filtered_orders,'bunching_min_cutoff_criteria', engine_instance.CONFIG) < data[0].order_sku.moq_ll:
+        engine_instance.combination_map.append({calcQuantity(filtered_orders, 'bunching_min_cutoff_criteria',engine_instance.CONFIG):filtered_orders})
         return None, True
     first_order_qty = float(data[0].__getattribute__(engine_instance.CONFIG['bunching_unit']))
     target_sum = target - float(data[0].__getattribute__(engine_instance.CONFIG['bunching_unit']))
@@ -259,7 +250,7 @@ def find_combinations(engine_instance,data, target, TIMER):
         return [data[0]], False
     if target_sum > 0:
         key = data[0].order_sku.sku_name  # Assuming the first dictionary's key should be used
-        return find_combinations_recursive(data[1:], key, target_sum, 0, [data[0]], target,first_order_qty, TIMER), False
+        return find_combinations_recursive(engine_instance,data[1:], key, target_sum, 0, [data[0]], target,first_order_qty, TIMER), False
 
 
 def find_combinations_recursive(engine_instance,data, key, target_sum, current_sum, combination, target, first_obj_qty, TIMER):
@@ -287,10 +278,10 @@ def find_combinations_recursive(engine_instance,data, key, target_sum, current_s
                 return new_combination
             elif new_sum < target_sum:  
                 # combination_map.append({new_sum:new_combination})
-                result = find_combinations_recursive(data[index + 1:], key, target_sum, new_sum, new_combination, target, first_obj_qty, TIMER)
+                result = find_combinations_recursive(engine_instance,data[index + 1:], key, target_sum, new_sum, new_combination, target, first_obj_qty, TIMER)
                 if result:
                     return result
-            elif new_sum > target_sum and calcQuantity(new_combination, 'bunching_max_cutoff_criteria') <= order.order_sku.moq_ul: 
+            elif new_sum > target_sum and calcQuantity(new_combination, 'bunching_max_cutoff_criteria', engine_instance.CONFIG) <= order.order_sku.moq_ul: 
                 return new_combination
 
     ## alternate bunching logic
@@ -299,3 +290,37 @@ def find_combinations_recursive(engine_instance,data, key, target_sum, current_s
         return combination
     else:
         return None
+    
+
+def orderShifter(valid_mts_sku, all_bunches, CONFIG):
+    """This function will shift the orders from the last mts bunch to the 
+    previous bunches."""
+    orders_to_be_shifted = []
+    for sku in valid_mts_sku:
+        for b in range(len(all_bunches),0,-1):
+            bunch = all_bunches[b-1]
+            if bunch[-1].order_sku.sku_name == sku:
+                if bunch[-1].mts_bool == True and not orders_to_be_shifted:
+                    orders_to_be_shifted = bunch
+                elif len(orders_to_be_shifted)!= 0:
+                    if orders_to_be_shifted[-1].mts_bool == True:
+                        bunch += orders_to_be_shifted[:-1]
+                    else:
+                        bunch += orders_to_be_shifted
+                    try:
+                        all_bunches.remove(orders_to_be_shifted)
+                        orders_to_be_shifted = []
+                    except:
+                        pass
+                    total_bunch_qty = calcQuantity(bunch, 'bunching_min_cutoff_criteria', CONFIG)
+                    
+                    if total_bunch_qty > bunch[0].order_sku.moq_ul:
+                        ## calc the orders that need to be shifted leftward
+                        orders_to_be_shifted = []
+                        for i in range(len(bunch)):
+                            if calcQuantity(bunch, 'bunching_max_cutoff_criteria') - calcQuantity(orders_to_be_shifted, 'bunching_max_cutoff_criteria', CONFIG) <= bunch[0].order_sku.moq_ul:
+                                break
+                            else:
+                                orders_to_be_shifted.append(bunch[i])
+                    all_bunches[b-1]=[ele for ele in bunch if ele not in orders_to_be_shifted]
+    return all_bunches

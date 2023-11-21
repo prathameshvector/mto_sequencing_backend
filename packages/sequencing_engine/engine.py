@@ -1,10 +1,12 @@
 import json
 import time
+import os
 import datetime
 import pandas as pd
-from packages.sequencing_engine.orders import Order
+from packages.sequencing_engine.orders import Order, bunchingCriteria
 from packages.sequencing_engine.operations import generateOutput, calcSeqScore, calcBunchExecTime, findBunchIdx,\
-      nextSwitchbunchingCriteria, switchMapGenerator, find_combinations, skuToBunchMap
+      nextSwitchbunchingCriteria, switchMapGenerator, find_combinations, skuToBunchMap, createOrders, createBunchingCriterias,\
+        calcRemSpace, calcQuantity, sortBunch,orderShifter
 
 class sequencingEngine:
     def __init__(self, config_path):
@@ -18,22 +20,26 @@ class sequencingEngine:
 
     def load_order_book(self):
         # Load order book from the specified file path
-        self.order_book_path = self.config.get("self.order_book_path")
-        self.self.order_book = pd.read_excel(self.order_book_path)
+        self.order_book_path = f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}"
+        self.order_book = pd.read_excel(self.order_book_path)
+        pass
+    def load_orders(self):
+        #here we create orders
+        createBunchingCriterias(f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}")
+        self.orders = createOrders(bunchingCriteria.instances,f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}", self.CONFIG)
     def run_bunching(self):
-        from operations import find_combinations
         self.all_bunches = []
         self.sku_to_bunch = {}
         default_mts_attributes = self.CONFIG['default_mts_attributes']
-        while self.order_book:
+        while self.orders:
             self.combination_map = []
-            input_value = float(self.order_book[0].order_sku.moq_ll)
-            bunch, lessthan_moq = find_combinations(self,self.order_book, input_value, time.perf_counter())
+            input_value = float(self.orders[0].order_sku.moq_ll)
+            bunch, lessthan_moq = find_combinations(self,self.orders, input_value, time.perf_counter())
             if bunch is not None:
                 self.all_bunches.append(bunch)
                 skuToBunchMap(bunch, self.all_bunches.index(bunch), self.sku_to_bunch)
                 for order in bunch:
-                    self.order_book.remove(order)
+                    self.orders.remove(order)
             else:
                 if self.combination_map:
                     bunch = list(max(self.combination_map, key=lambda x: max(x.keys())).values())[0]
@@ -52,9 +58,9 @@ class sequencingEngine:
                     skuToBunchMap(bunch, self.all_bunches.index(bunch), self.sku_to_bunch)
                     for order in bunch:
                         if order.order_rd != None:
-                            self.order_book.remove(order)
+                            self.orders.remove(order)
                 else:
-                    bunch = self.order_book[0:1]
+                    bunch = self.orders[0:1]
 
                     attributes = default_mts_attributes.copy()
                     attributes[self.CONFIG['bunching_unit']] = bunch[0].order_sku.moq_ll - bunch[0].__getattribute__(self.CONFIG['bunching_min_cutoff_criteria'])
@@ -64,11 +70,42 @@ class sequencingEngine:
                     skuToBunchMap(bunch, self.all_bunches.index(bunch), self.sku_to_bunch)
                     for order in bunch:
                         if order.order_rd != None:
-                            self.order_book.remove(order)
-    def run_sequencing(self,bunches, sku, function_call_time,TIMER, relax_days, current_time, final_seq, final_seq_bool, seq_score_map, call_ct, switch_map):
-        global best_seq
+                            self.orders.remove(order)
+    def run_order_shifting(self):
+        #This for loop counts the number of mts bunches each sku has
+        self.mts_count = {}
+        self.valid_mts_sku = []
+        self.sku_bunch_count_map = {}
+        for bunch in self.all_bunches:
+            if bunch[-1].order_sku.sku_name not in self.mts_count:
+                self.mts_count[bunch[-1].order_sku.sku_name] = 0
+            if bunch[-1].mts_bool == True:
+                self.mts_count[bunch[-1].order_sku.sku_name] += 1
+
+
+        #This for loop maintains a key value pair for count of bunches each sku has
+        for sku in list(bunchingCriteria.instances.keys()):
+            if sku not in self.sku_bunch_count_map:
+                self.sku_bunch_count_map[sku] = 0
+            for bunch in self.all_bunches:
+                if bunch[0].order_sku.sku_name == sku:
+                    self.sku_bunch_count_map[sku] += 1
+
+
+        #This for loop is used to find out the skus whose bunches can be shifted
+        for sku in list(bunchingCriteria.instances.keys()):
+            for b in range(len(self.all_bunches), 0, -1):
+                if self.all_bunches[b-1][-1].order_sku.sku_name == sku:
+                    if self.all_bunches[b-1][-1].mts_bool == True and self.sku_bunch_count_map[sku] != 1:
+                        if calcRemSpace(bunchingCriteria.instances[sku],self.all_bunches[:b-1], self.CONFIG) > calcQuantity(self.all_bunches[b-1][:-1], 'bunching_max_cutoff_criteria', self.CONFIG):
+                            self.valid_mts_sku.append(sku)
+                    else:
+                        break
+        self.all_bunches = orderShifter(self.valid_mts_sku, self.all_bunches, self.CONFIG)
+        self.all_bunches = [sorted(bunch, key=sortBunch) for bunch in self.all_bunches]
+    def run_sequencing(self,best_seq,bunches, sku, function_call_time,TIMER, relax_days, current_time, final_seq, final_seq_bool, seq_score_map, call_ct, switch_map,CONFIG):
         if len(bunches) == 0:
-            score = calcSeqScore(self.CONFIG['current_datetime'],final_seq)
+            score = calcSeqScore(CONFIG['current_datetime'],final_seq, CONFIG)
             seq_score_map[score] = final_seq
             if (len(seq_score_map) > 50 and best_seq == []) or score == 0:
                 best_seq = seq_score_map[max(seq_score_map)] if seq_score_map else final_seq
@@ -95,10 +132,10 @@ class sequencingEngine:
             bunch_dd = datetime.datetime.strptime(bunch[0].order_dd,'%Y-%m-%d %H:%M:%S')
 
             #check if order_dd or order_rd is affected if this bunch is added to the sequence
-            if current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch))) < bunch_dd + datetime.timedelta(days=relax_days) and\
-                current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch))) >= early_rd:
+            if current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch,CONFIG))) < bunch_dd + datetime.timedelta(days=relax_days) and\
+                current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch,CONFIG))) >= early_rd:
 
-                new_current_time = current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch)))
+                new_current_time = current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch,CONFIG)))
                 new_sequence = final_seq + [bunch]
                 # bunches.remove(bunch)      # remove the bunch from list of bunches as it is included in the final sequence
 
@@ -117,7 +154,7 @@ class sequencingEngine:
                         if final_seq_bool == False:
                             new_call_ct = call_ct + 1
                             new_bunches = [bnch  for bnch in bunches if bnch != bunch]
-                            self.run_sequencing(self,bunches=new_bunches,sku=sku,function_call_time=function_call_time,TIMER=TIMER, relax_days=relax_days, current_time=new_current_time, final_seq=new_sequence, final_seq_bool = final_seq_bool, seq_score_map=seq_score_map, call_ct=new_call_ct,switch_map=switch_map)
+                            self.run_sequencing(bunches=new_bunches,best_seq=best_seq,sku=sku,function_call_time=function_call_time,TIMER=TIMER, relax_days=relax_days, current_time=new_current_time, final_seq=new_sequence, final_seq_bool = final_seq_bool, seq_score_map=seq_score_map, call_ct=new_call_ct,switch_map=switch_map,CONFIG=CONFIG)
                         else:
                             return
                     else:
@@ -137,7 +174,7 @@ class sequencingEngine:
                     return []
         return
 
-    def save_output(self):
+    def save_output(self,fin_seq,current_date,CONFIG):
         # Save sequencing output to the specified file path
         # You might adjust this based on how your output is generated
-        generateOutput()
+        generateOutput(fin_seq,current_date,CONFIG)
