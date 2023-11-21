@@ -15,7 +15,7 @@ def main():
     sequence_engine.load_orders()
     sequence_engine.run_bunching()
     sequence_engine.run_order_shifting()
-    #logic to call call sequencing 
+    #logic to call call sequencing
     sequence_engine.total_bunches = sequence_engine.all_bunches.__len__()
     sequence_engine.total_orders = sum(len(sl) for sl in sequence_engine.all_bunches)
     sequence_engine.relax_days = 10
@@ -36,6 +36,5 @@ def main():
 
     ##Save the output
     sequence_engine.save_output(sequence_engine.fin_seq,sequence_engine.current_date,CONFIG)
-    
 if __name__ == "__main__":
     main()
