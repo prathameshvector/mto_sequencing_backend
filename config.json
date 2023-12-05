@@ -1,5 +1,6 @@
 {   "filepaths":{
-        "input_file_path" : "D:\\Python\\mto_sequencing\\input"
+        "input_file_path" : "D:\\Python\\mto_sequencing_backend\\input",
+        "output_file_path" : "D:\\Python\\mto_sequencing_backend\\output"
         },
     "bunching_criteria" : "sku",
     "bunching_unit" : "order_billet_nos",
@@ -13,5 +14,6 @@
          "order_billet_nos":null,
          "order_rd":null,
          "order_dd":null
-    }
+    },
+    "relax_days":10
 }

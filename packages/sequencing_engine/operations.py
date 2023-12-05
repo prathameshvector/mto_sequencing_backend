@@ -2,7 +2,12 @@ import datetime
 import time
 import os
 import openpyxl
+import json
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly
+import os
 from packages.sequencing_engine.orders import Order, bunchingCriteria
 from xlwt import Workbook
 import datetime as dt
@@ -16,8 +21,8 @@ def createBunchingCriterias(INPUT_FILE_PATH):
         unit = min_batch_masterfile.iloc[i]['Key']
         obj = bunchingCriteria(unit,min_batch_masterfile.iloc[i]['Min batch Size'],float(max_batch_masterfile.iloc[i]['Max Batch Size']),cycle_time_masterfile.iloc[i]['Cycle Time'],0)
 
-def createOrders(bunching_criteria_instances, INPUT_FILE_PATH, CONFIG):
-    file = pd.read_excel(INPUT_FILE_PATH)
+def createOrders(bunching_criteria_instances, file, CONFIG):
+    # file = pd.read_excel(INPUT_FILE_PATH)
     file = file.sort_values(by='order due date')
     all_orders = []
     cnt = 0
@@ -28,7 +33,8 @@ def createOrders(bunching_criteria_instances, INPUT_FILE_PATH, CONFIG):
         order_rd = str(file['order release date'].iloc[cnt])
         order_dd = str(file['order due date'].iloc[cnt])
         order_so = str(file['so'].iloc[cnt])
-        all_orders.append(Order(order_so,sku_obj,order_qty, billet_nos, order_rd,order_dd, False, sku_obj.early_readiness_days))
+        order_machine = file['Machine'].iloc[cnt]
+        all_orders.append(Order(order_so,sku_obj,order_qty, billet_nos, order_rd,order_dd, False, sku_obj.early_readiness_days, order_machine))
         cnt += 1
     return all_orders
 
@@ -151,7 +157,7 @@ def findBunchIdx(sku, bunches):
 
 def execDateCalculator(current_date,order,CONFIG):
     order_exec_time = order.__getattribute__(CONFIG['cycle_time_criteria']) * order.order_sku.cycle_time
-    return current_date + datetime.timedelta(minutes= int(order_exec_time))
+    return current_date + datetime.timedelta(minutes= int(order_exec_time)), datetime.timedelta(minutes= int(order_exec_time))
 
 def consecutiveBunchValidator(bunches):
     consec_sku = bunches[0].order_sku.sku_name
@@ -188,7 +194,7 @@ def boolAdjacentBunches(sku,final_seq):
         if bunch[0].order_sku.sku_name == sku:
             netAdjacentBunchSize += calcQuantity(bunch=bunch,quant_criteria='bunching_max_cutoff_criteria')
 
-def generateOutput(fin_seq, current_date,CONFIG):
+def generateOutput(ol_no,fin_seq, current_date, CONFIG):
     wb = Workbook()
     sheet1 = wb.add_sheet('Sheet 1')
     row = 1
@@ -198,8 +204,10 @@ def generateOutput(fin_seq, current_date,CONFIG):
     sheet1.write(0, 3, 'Billet Nos.')
     sheet1.write(0, 4, 'order release date')
     sheet1.write(0, 5, 'order due date')
-    sheet1.write(0, 6, 'actual order completion date')
-    sheet1.write(0, 7, 'OTIF')
+    sheet1.write(0, 6, 'actual order start date')
+    sheet1.write(0, 7, 'actual order completion date')
+    sheet1.write(0, 8, 'OTIF')
+    sheet1.write(0, 9, 'Machine')
     for index,bunch in enumerate(fin_seq):
         if index != 0 and fin_seq[index-1][0].order_sku.sku_name != bunch[0].order_sku.sku_name:
             prev_sku = fin_seq[index-1][0].order_sku.sku_name
@@ -213,19 +221,21 @@ def generateOutput(fin_seq, current_date,CONFIG):
             sheet1.write(row, 3, str(order.order_billet_nos))
             sheet1.write(row, 4, order.order_rd)
             sheet1.write(row, 5, order.order_dd)
-            current_date = execDateCalculator(current_date, order,CONFIG)
-            sheet1.write(row, 6, str(current_date))
+            current_date, exec_time = execDateCalculator(current_date, order, CONFIG)
+            sheet1.write(row, 6, str(current_date - exec_time))
+            sheet1.write(row, 7, str(current_date))
             try:
                 delay = current_date - dt.datetime.strptime(order.order_dd,'%Y-%m-%d %H:%M:%S')
             except:
                 pass
             if int(delay.days) > 0:
-                sheet1.write(row, 7,'FALSE')
+                sheet1.write(row, 8,'FALSE')
             else:
-                sheet1.write(row, 7, 'TRUE')
+                sheet1.write(row, 8, 'TRUE')
+            sheet1.write(row, 9, order.order_machine)
             row += 1
         row += 1
-    wb.save('./output/sequencing output.csv')
+    wb.save(f'./output/sequencing_output_{ol_no+1}.csv')
 def skuToBunchMap(bunch,bunch_idx,map):
     sku = bunch[0].order_sku.sku_name
     if sku not in map:
@@ -324,3 +334,44 @@ def orderShifter(valid_mts_sku, all_bunches, CONFIG):
                                 orders_to_be_shifted.append(bunch[i])
                     all_bunches[b-1]=[ele for ele in bunch if ele not in orders_to_be_shifted]
     return all_bunches
+
+
+def order_to_machine_assigner():
+    #load config
+    with open('config.json', 'r') as config_file:
+        CONFIG = json.load(config_file)
+    # Load order book from the specified file path
+    order_book_path = f"{CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(CONFIG.get('filepaths').get('input_file_path'))[0]}"
+    order_book = pd.read_excel(order_book_path)
+    unique_values = order_book['Machine'].unique()
+    list_of_dfs = [order_book[order_book['Machine'] == value].reset_index(drop=True) for value in unique_values]
+    return list_of_dfs
+
+def output_plotter():
+    with open('config.json', 'r') as config_file:
+        CONFIG = json.load(config_file)
+    output_files_path = CONFIG.get('filepaths').get('output_file_path')
+    combined_output = []
+    for fname in os.listdir(output_files_path):
+        if fname.endswith('.csv'):
+            file_path = os.path.join(output_files_path, fname)
+            current_data = pd.read_excel(file_path)
+            combined_output.append(current_data)
+    combined_data = pd.concat(combined_output, ignore_index=True)
+
+    combined_data = combined_data.sort_values(by='actual order start date')
+    task = combined_data['sku']
+    start = combined_data['actual order start date']
+    finish = combined_data['actual order completion date']
+
+
+    fig = px.timeline(combined_data, x_start='actual order start date', x_end='actual order completion date', y='Machine', color='sku',
+                    title='Task overview', labels={'sku': 'SKU'})
+    fig.update_yaxes(autorange='reversed')
+    fig.update_layout(
+        title_font_size=42,
+        font_size=18,
+        title_font_family='Arial'
+    )
+
+    plotly.offline.plot(fig, filename=f"{CONFIG.get('filepaths').get('output_file_path')}\\output.html")

@@ -18,15 +18,10 @@ class sequencingEngine:
         with open(self.config_path, 'r') as config_file:
             self.CONFIG = json.load(config_file)
 
-    def load_order_book(self):
-        # Load order book from the specified file path
-        self.order_book_path = f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}"
-        self.order_book = pd.read_excel(self.order_book_path)
-        pass
     def load_orders(self):
         #here we create orders
         createBunchingCriterias(f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}")
-        self.orders = createOrders(bunchingCriteria.instances,f"{self.CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(self.CONFIG.get('filepaths').get('input_file_path'))[0]}", self.CONFIG)
+        self.orders = createOrders(bunchingCriteria.instances,self.order_book, self.CONFIG)
     def run_bunching(self):
         self.all_bunches = []
         self.sku_to_bunch = {}
@@ -52,7 +47,7 @@ class sequencingEngine:
                     attributes = default_mts_attributes.copy()
                     attributes[self.CONFIG['bunching_unit']] = val
 
-                    mts_order = Order(so_no='mts',order_sku=bunch[0].order_sku, order_qty=attributes['order_qty'], order_billet_nos=attributes['order_billet_nos'], order_rd= attributes['order_rd'], mts_bool=True,order_dd=attributes['order_dd'], early_readiness_days=bunch[0].order_sku.early_readiness_days)
+                    mts_order = Order(so_no='mts',order_sku=bunch[0].order_sku, order_qty=attributes['order_qty'], order_billet_nos=attributes['order_billet_nos'], order_rd= attributes['order_rd'], mts_bool=True,order_dd=attributes['order_dd'], early_readiness_days=bunch[0].order_sku.early_readiness_days, order_machine = bunch[0].order_machine)
                     bunch.append(mts_order)
                     self.all_bunches.append(bunch)
                     skuToBunchMap(bunch, self.all_bunches.index(bunch), self.sku_to_bunch)
@@ -174,7 +169,7 @@ class sequencingEngine:
                     return []
         return
 
-    def save_output(self,fin_seq,current_date,CONFIG):
+    def save_output(self,ol_no,fin_seq,current_date,CONFIG):
         # Save sequencing output to the specified file path
         # You might adjust this based on how your output is generated
-        generateOutput(fin_seq,current_date,CONFIG)
+        generateOutput(ol_no,fin_seq,current_date,CONFIG)

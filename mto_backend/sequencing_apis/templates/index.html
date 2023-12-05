@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<form action="{% url 'process_data' %}" method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <label for="csv_file">Upload CSV File:</label>
+  <input type="file" name="csv_file" accept=".csv"><br>
+  
+  <label for="json_data">Enter JSON Data:</label>
+  <textarea name="json_data" rows="4" cols="50"></textarea><br>
+
+  <input type="submit" value="Process Data">
+</form>
+
+
+</body>
+</html>

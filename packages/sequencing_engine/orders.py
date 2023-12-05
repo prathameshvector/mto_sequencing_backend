@@ -11,7 +11,7 @@ class bunchingCriteria:
         self.__class__.instances[sku_name] = self
 
 class Order:
-    def __init__(self, so_no,order_sku, order_qty, order_billet_nos, order_rd, order_dd, mts_bool, early_readiness_days):
+    def __init__(self, so_no,order_sku, order_qty, order_billet_nos, order_rd, order_dd, mts_bool, early_readiness_days,order_machine):
 
         if isinstance(order_sku, bunchingCriteria) == True:
             self.order_sku = order_sku
@@ -46,6 +46,7 @@ class Order:
         self.mts_bool = mts_bool
         self.early_readiness_days = early_readiness_days
         self.so_no = so_no
+        self.order_machine = order_machine
         if order_dd != None:
             self.early_readiness_date = dt.datetime.strptime(self.order_rd,'%Y-%m-%d %H:%M:%S') - dt.timedelta(days=self.early_readiness_days)
         else:
