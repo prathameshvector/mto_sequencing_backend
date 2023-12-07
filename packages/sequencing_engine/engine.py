@@ -6,7 +6,7 @@ import pandas as pd
 from packages.sequencing_engine.orders import Order, bunchingCriteria
 from packages.sequencing_engine.operations import generateOutput, calcSeqScore, calcBunchExecTime, findBunchIdx,\
       nextSwitchbunchingCriteria, switchMapGenerator, find_combinations, skuToBunchMap, createOrders, createBunchingCriterias,\
-        calcRemSpace, calcQuantity, sortBunch,orderShifter
+        calcRemSpace, calcQuantity, sortBunch,orderShifter, alter_sequence_bunches_by_grouped_criteria
 
 class sequencingEngine:
     def __init__(self, config_path):
@@ -100,6 +100,8 @@ class sequencingEngine:
         self.all_bunches = [sorted(bunch, key=sortBunch) for bunch in self.all_bunches]
     def run_sequencing(self,best_seq,bunches, sku, function_call_time,TIMER, relax_days, current_time, final_seq, final_seq_bool, seq_score_map, call_ct, switch_map,CONFIG):
         if len(bunches) == 0:
+            """GC code here"""
+            final_seq = alter_sequence_bunches_by_grouped_criteria(final_seq, CONFIG)
             score = calcSeqScore(CONFIG['current_datetime'],final_seq, CONFIG)
             seq_score_map[score] = final_seq
             if (len(seq_score_map) > 50 and best_seq == []) or score == 0:
@@ -118,7 +120,7 @@ class sequencingEngine:
 
         while len(bunches) != 0:
 
-            idx = findBunchIdx(sku, bunches)
+            idx = findBunchIdx(sku, bunches)    
             if idx != None:
                 bunch = bunches[idx]
             else:
@@ -132,8 +134,6 @@ class sequencingEngine:
 
                 new_current_time = current_time + datetime.timedelta(minutes= int(calcBunchExecTime(bunch,CONFIG)))
                 new_sequence = final_seq + [bunch]
-                # bunches.remove(bunch)      # remove the bunch from list of bunches as it is included in the final sequence
-
 
                 next_switch_sku = nextSwitchbunchingCriteria(new_sequence[-1][0].order_sku.sku_name, switch_map)
                 test = 0
@@ -142,6 +142,7 @@ class sequencingEngine:
                     cost = _[1]
                     # find the very first bunch with the given sku
                     idx = findBunchIdx(sku, bunches)
+                    
                     if idx is not None:
                         # logic to recursively call the next bunches
                         # first place the bunch in the first position

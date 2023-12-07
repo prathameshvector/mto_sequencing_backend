@@ -15,11 +15,12 @@ def main():
         CONFIG = sequence_engine.CONFIG
         sequence_engine.current_date = dt.datetime.strptime(CONFIG['current_datetime'],'%Y-%m-%d %H:%M:%S')
         switch_map = switchMapGenerator(CONFIG)
-        # sequence_engine.load_order_book()
+        
         sequence_engine.order_book = order_book
         sequence_engine.load_orders()
         sequence_engine.run_bunching()
         sequence_engine.run_order_shifting()
+        
         #logic to call call sequencing
         sequence_engine.total_bunches = sequence_engine.all_bunches.__len__()
         sequence_engine.total_orders = sum(len(sl) for sl in sequence_engine.all_bunches)
@@ -43,3 +44,4 @@ def main():
     output_plotter()
 if __name__ == "__main__":
     main()
+    
