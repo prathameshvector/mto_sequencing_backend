@@ -2,7 +2,7 @@
         "input_file_path" : "D:\\Python\\mto_sequencing_backend\\input",
         "output_file_path" : "D:\\Python\\mto_sequencing_backend\\output"
         },
-    "bunching_criteria" : "sku",
+    "bunching_criteria" : "Campaign",
     "bunching_unit" : "order_billet_nos",
     "bunching_min_cutoff_criteria":"order_billet_nos",
     "bunching_max_cutoff_criteria":"order_billet_nos",

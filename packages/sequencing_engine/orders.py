@@ -1,8 +1,9 @@
 import datetime as dt
 class bunchingCriteria:
     instances = {}
-    def __init__(self,sku_name, moq_ll, moq_ul, cycle_time, early_readiness_days):
+    def __init__(self,sku_name, criteria_group, moq_ll, moq_ul, cycle_time, early_readiness_days):
         self.sku_name = sku_name
+        self.criteria_group = criteria_group
         self.moq_ll = moq_ll
         self.moq_ul = moq_ul
         

@@ -2,6 +2,7 @@ import datetime
 import time
 import os
 import openpyxl
+import operator
 import json
 import pandas as pd
 import numpy as np
@@ -17,9 +18,10 @@ def createBunchingCriterias(INPUT_FILE_PATH):
     min_batch_masterfile = pd.read_excel(INPUT_FILE_PATH, sheet_name='Min Batch')
     max_batch_masterfile = pd.read_excel(INPUT_FILE_PATH, sheet_name='Max Batch')
     cycle_time_masterfile = pd.read_excel(INPUT_FILE_PATH,sheet_name='Cycle Time')
+    group_mapping_masterfile = pd.read_excel(INPUT_FILE_PATH,sheet_name='Group Mapping')
     for i in range(len(min_batch_masterfile)):
-        unit = min_batch_masterfile.iloc[i]['Key']
-        obj = bunchingCriteria(unit,min_batch_masterfile.iloc[i]['Min batch Size'],float(max_batch_masterfile.iloc[i]['Max Batch Size']),cycle_time_masterfile.iloc[i]['Cycle Time'],0)
+        unit = min_batch_masterfile.iloc[i]['key']
+        obj = bunchingCriteria(unit,group_mapping_masterfile.iloc[i]['grouped_key'],min_batch_masterfile.iloc[i]['Min batch Size'],float(max_batch_masterfile.iloc[i]['Max Batch Size']),cycle_time_masterfile.iloc[i]['Cycle Time'],0)
 
 def createOrders(bunching_criteria_instances, file, CONFIG):
     # file = pd.read_excel(INPUT_FILE_PATH)
@@ -334,6 +336,59 @@ def orderShifter(valid_mts_sku, all_bunches, CONFIG):
                                 orders_to_be_shifted.append(bunch[i])
                     all_bunches[b-1]=[ele for ele in bunch if ele not in orders_to_be_shifted]
     return all_bunches
+
+
+
+def alter_sequence_bunches_by_grouped_criteria(sequence, CONFIG):
+    def adjust_subsequence(previous_criteria_group, previous_bunch_index, required_amt, sequence):
+        target_bunches = []
+        if required_amt > 0:   # 
+            for i in range(previous_bunch_index + 1,len(sequence[previous_bunch_index:])):
+                if sequence[i][0].order_sku.criteria_group == previous_criteria_group:
+                    target_bunches.append(sequence[i])
+            target_bunches = sorted(target_bunches, key = lambda inner_list: calcQuantity(inner_list, 'bunching_min_cutoff_criteria', CONFIG))
+            cumulative_size = 0
+            new_subsequence = []
+            for bunch in target_bunches:
+                cumulative_size += calcQuantity(bunch, 'bunching_min_cutoff_criteria', CONFIG)
+                new_subsequence.append(bunch)
+                sequence.remove(bunch)
+                if cumulative_size >= required_amt:
+                    sequence[previous_bunch_index+1:previous_bunch_index+1] = new_subsequence
+                    return sequence
+            return None
+        elif required_amt < 0:
+            pass
+    operator_mapping = {
+    '>=': operator.ge,
+    '<=': operator.le,
+    '==': operator.eq,
+    '!=': operator.ne,
+    '<': operator.lt,
+    '>': operator.gt,
+    }
+    order_book_path = f"{CONFIG.get('filepaths').get('input_file_path')}\\{os.listdir(CONFIG.get('filepaths').get('input_file_path'))[0]}"
+    grouped_criteria_masterfile = pd.read_excel(order_book_path,sheet_name='Grouped Criteria')
+    for bunch_index,(previous_bunch,current_bunch) in enumerate(zip(sequence, sequence[1:])):
+        previous_criteria_group = previous_bunch[0].order_sku.criteria_group
+        current_criteria_group = current_bunch[0].order_sku.criteria_group
+        required_conditions_df = grouped_criteria_masterfile[(grouped_criteria_masterfile['Previous_Group_Key'] == previous_criteria_group) & \
+        (grouped_criteria_masterfile['Current_Group_Key'] == current_criteria_group)]
+        for index, row in required_conditions_df.iterrows():
+            condition = operator_mapping.get(row['Comparison_Method'])
+            if condition(calcQuantity(previous_bunch, 'bunching_max_cutoff_criteria',CONFIG),row['Criteria_On_Current_Group_Key']) == True:
+                pass
+            else:
+                #check if any more bunches with same group are present.If they are present,
+                #bring the smallest of them all in between the conflicting subsequence.
+                required_amt = row['Criteria_On_Current_Group_Key'] - calcQuantity(previous_bunch, 'bunching_max_cutoff_criteria',CONFIG)
+                altered_sequence = adjust_subsequence(previous_criteria_group, bunch_index, required_amt, sequence)
+                if altered_sequence != None:  # if we get bunches to 
+                    sequence = altered_sequence
+                    return sequence
+                else:
+                    setattr(sequence[bunch_index][-1],CONFIG['bunching_max_cutoff_criteria'],row['Criteria_On_Current_Group_Key'])
+                    return sequence
 
 
 def order_to_machine_assigner():
