@@ -3,7 +3,7 @@ import time
 import os
 import datetime
 import pandas as pd
-from packages.sequencing_engine.orders import Order, bunchingCriteria
+from packages.sequencing_engine.order_management_objects import Order, bunchingCriteria
 from packages.sequencing_engine.operations import generateOutput, calcSeqScore, calcBunchExecTime, findBunchIdx,\
       nextSwitchbunchingCriteria, switchMapGenerator, find_combinations, skuToBunchMap, createOrders, createBunchingCriterias,\
         calcRemSpace, calcQuantity, sortBunch,orderShifter, alter_sequence_bunches_by_grouped_criteria

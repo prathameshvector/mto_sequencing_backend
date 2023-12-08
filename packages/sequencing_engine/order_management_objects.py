@@ -1,4 +1,5 @@
 import datetime as dt
+import uuid
 class bunchingCriteria:
     instances = {}
     def __init__(self,sku_name, criteria_group, moq_ll, moq_ul, cycle_time, early_readiness_days):
