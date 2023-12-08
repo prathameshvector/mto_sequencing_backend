@@ -9,7 +9,7 @@ import numpy as np
 import plotly.express as px
 import plotly
 import os
-from packages.sequencing_engine.orders import Order, bunchingCriteria
+from packages.sequencing_engine.order_management_objects import Order, bunchingCriteria
 from xlwt import Workbook
 import datetime as dt
 import warnings
